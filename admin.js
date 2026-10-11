@@ -35,7 +35,7 @@
     読んでいる = true;
     if (初めて) 画面を切り替える('読み込み中');
     else 要素('読んだ時刻').textContent = '読み込んでいます…';
-    送る({ 操作: '管理の一覧', トークン: 鍵 }, function (r) {
+    送り直しつきで送る({ 操作: '管理の一覧', トークン: 鍵 }, function (r) {
       return Array.isArray(r.職員) && Array.isArray(r.端末) && Array.isArray(r.記録) && r.自分;
     }).then(function (結果) {
       読んでいる = false;
@@ -130,7 +130,7 @@
 
   function 止める(枠, t) {
     枠.textContent = '止めています…';
-    送る({ 操作: '失効', トークン: 鍵, 端末ID: t.端末ID }).then(function (結果) {
+    送り直しつきで送る({ 操作: '失効', トークン: 鍵, 端末ID: t.端末ID }).then(function (結果) {
       if (!結果.届いた) {
         止めるボタンを置く(枠, t);
         知らせる('止められたか分かりませんでした。もう一度ためしてください。');
@@ -152,7 +152,8 @@
     箱.hidden = false;
     要素('番号').textContent = '······';
     要素('番号の説明').textContent = '番号を出しています…';
-    送る({ 操作: '番号を出す', トークン: 鍵, 職員ID: 職員ID }, function (r) {
+    // 送り直しで番号が出し直されても、画面に出るのは最後の（使える）番号
+    送り直しつきで送る({ 操作: '番号を出す', トークン: 鍵, 職員ID: 職員ID }, function (r) {
       return /^\d{6}$/.test(r.番号) && typeof r.期限 === 'string';
     }).then(function (結果) {
       ボタン.disabled = false;

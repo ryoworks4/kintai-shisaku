@@ -8,7 +8,10 @@
 // ── 送る先（作り方 B）──────────────────────────────────
 // 作り方 A（Apps Script の画面）に切り替える時は、送る() の中身だけを google.script.run に差し替える
 var 送り先 = 'https://script.google.com/macros/s/AKfycbw54aR61c9ros8DOI3nWWVoNLmjFMQG2DQeKlh7jTiUgRxE5IpyKZ8KYMWXe1RYBvaA/exec';
-var 応答の待ち時間 = 20000;   // 公開直後に35秒かかったことがある。切れても同じ操作IDで送り直すので二重にはならない
+// 裏の処理は1.2〜3.3秒で終わる（実行数で確認）。それより遅いのは Google の返事の窓口が崩れている時なので、
+// 8秒で切って送り直す方が早く済む（2026-10-11 の計測で決定）。送り直しても二重にならない依頼だけを送り直す
+var 応答の待ち時間 = 8000;
+var 送り直しの間 = [0, 1000, 3000];   // 送り直しつきで送る() の待ち（ミリ秒）。最大3回
 
 /**
  * 裏に1回送る。返すのは { 届いた, 応答 }。
@@ -43,6 +46,26 @@ function 送る(依頼, 形が正しいか) {
   });
 }
 
+/**
+ * 届かなければ送り直す（最大3回）。送り直しても二重にならない依頼に使う：
+ * 読むだけ・登録（同じトークンなら登録済みと返る）・端末を止める・番号を出す（最後に出た番号が使える）。
+ * 打刻は staff.js が自分で送り直す（押した時刻と「送っています」の表示があるため）
+ */
+function 送り直しつきで送る(依頼, 形が正しいか) {
+  var 回 = 0;
+  function 一回() {
+    return new Promise(function (済む) { setTimeout(済む, 送り直しの間[回]); })
+      .then(function () { return 送る(依頼, 形が正しいか); })
+      .then(function (結果) {
+        var もう一度 = !結果.届いた || ['混雑', '内部'].indexOf(結果.応答.コード) >= 0;
+        回++;
+        if (もう一度 && 回 < 送り直しの間.length) return 一回();
+        return 結果;
+      });
+  }
+  return 一回();
+}
+
 // ── 端末の中の置き場（使えない環境でも画面は動く）───────────────────
 var 置き場の頭 = 'kintai-shisaku:';
 
@@ -60,6 +83,13 @@ function しまう(キー, 値) {
     else localStorage.setItem(置き場の頭 + キー, JSON.stringify(値));
     return true;
   } catch (e) { return false; }
+}
+
+/** 端末のトークン（英小文字と数字の64桁の乱数）。登録の画面を出すたびに新しく作る */
+function 新しいトークン() {
+  var b = new Uint8Array(32);
+  crypto.getRandomValues(b);
+  return Array.prototype.map.call(b, function (x) { return ('0' + x.toString(16)).slice(-2); }).join('');
 }
 
 function 新しい操作ID() {
@@ -149,13 +179,15 @@ function 端末名の見当() {
 
 /**
  * 代表からもらった6けたの番号で、この端末を登録する。
- * 済んだら(応答) は、トークンをしまってから呼ぶ。前置き は断られて戻ってきた時の一言。
+ * トークンはこの端末で作って送る。返事が届かず押し直しても、同じトークンなので裏は「登録済み」と返す。
+ * 済んだら({ トークン, 名前, 役割 }) は、トークンをしまってから呼ぶ。前置き は断られて戻ってきた時の一言。
  */
 function 登録の画面を出す(前置き, 済んだら) {
   var 入れ物 = 要素('登録');
   入れ物.textContent = '';
   画面を切り替える('登録');
   知らせる(null);
+  var トークン = 新しいトークン();
 
   var 番号 = 作る('input', {
     id: '番号の欄', type: 'text', inputmode: 'numeric', autocomplete: 'one-time-code',
@@ -181,22 +213,28 @@ function 登録の画面を出す(前置き, 済んだら) {
 
   用紙.addEventListener('submit', function (e) {
     e.preventDefault();
+    // しまえない画面（プライベートブラウズなど）では、番号を使う前に止める
+    if (!しまう('登録の試し', 1)) {
+      返事.textContent = 'この画面では登録を残せません（プライベートブラウズなど）。ふつうの画面で開き直してください。';
+      return;
+    }
+    しまう('登録の試し', null);
     ボタン.disabled = true;
     返事.textContent = '登録しています…';
-    送る({ 操作: '登録', 番号: 番号.value, 端末名: 名前.value }, function (r) {
-      return typeof r.トークン === 'string' && /^[0-9a-f]{64}$/.test(r.トークン);
+    送り直しつきで送る({ 操作: '登録', 番号: 番号.value, 端末名: 名前.value, トークン: トークン }, function (r) {
+      return typeof r.名前 === 'string' && typeof r.役割 === 'string';
     }).then(function (結果) {
       ボタン.disabled = false;
       if (!結果.届いた) {
-        返事.textContent = '送れませんでした。電波のよい所で、もう一度押してください。続く時は、代表に新しい番号をもらってください。';
+        返事.textContent = '送れませんでした。電波のよい所で、もう一度押してください。';
         return;
       }
       if (!結果.応答.ok) { 返事.textContent = 結果.応答.理由; return; }
-      if (!しまう('トークン', 結果.応答.トークン)) {
-        返事.textContent = 'この画面では登録を残せません（プライベートブラウズなど）。ふつうの画面で開き直して、代表に新しい番号をもらってください。';
+      if (!しまう('トークン', トークン)) {
+        返事.textContent = 'この画面では登録を残せません。ふつうの画面で開き直して、代表に新しい番号をもらってください。';
         return;
       }
-      済んだら(結果.応答);
+      済んだら({ トークン: トークン, 名前: 結果.応答.名前, 役割: 結果.応答.役割 });
     });
   });
 
