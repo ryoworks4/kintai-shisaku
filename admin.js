@@ -5,6 +5,8 @@
  * （池田建設で「読込ボタン・押してから遅い」が不満になった）。
  */
 (function () {
+  if (埋め込まれていたら止める()) return;
+
   var 読み直しの間隔 = 5000;   // ミリ秒。戻るたびに読みすぎない
 
   var 鍵 = 取り出す('トークン');
@@ -35,9 +37,7 @@
     読んでいる = true;
     if (初めて) 画面を切り替える('読み込み中');
     else 要素('読んだ時刻').textContent = '読み込んでいます…';
-    送り直しつきで送る({ 操作: '管理の一覧', トークン: 鍵 }, function (r) {
-      return Array.isArray(r.職員) && Array.isArray(r.端末) && Array.isArray(r.記録) && r.自分;
-    }).then(function (結果) {
+    送り直しつきで送る({ 操作: '管理の一覧', トークン: 鍵 }, 一覧の形か).then(function (結果) {
       読んでいる = false;
       if (!結果.届いた) {
         要素('読んだ時刻').textContent = '';
@@ -128,9 +128,22 @@
     枠.appendChild(b);
   }
 
+  /** 一覧の中身の形を、1件ずつ確かめる（欠けた記録を描いて画面が崩れたり、別の返事を一覧と取り違えたりしない） */
+  function 一覧の形か(r) {
+    var 文字 = function (o, キー) { return キー.every(function (k) { return typeof o[k] === 'string'; }); };
+    return !!r.自分 && typeof r.自分.名前 === 'string' &&
+        Array.isArray(r.職員) && r.職員.every(function (p) { return 文字(p, ['職員ID', '名前', '役割']); }) &&
+        Array.isArray(r.端末) && r.端末.every(function (t) {
+          return 文字(t, ['端末ID', '職員ID', '名前', '端末名', '登録日時']) && typeof t.自分 === 'boolean';
+        }) &&
+        Array.isArray(r.記録) && r.記録.every(function (k) { return 文字(k, ['記録ID', '名前', '種類', '時刻']); });
+  }
+
   function 止める(枠, t) {
     枠.textContent = '止めています…';
-    送り直しつきで送る({ 操作: '失効', トークン: 鍵, 端末ID: t.端末ID }).then(function (結果) {
+    送り直しつきで送る({ 操作: '失効', トークン: 鍵, 端末ID: t.端末ID }, function (r) {
+      return r.端末ID === t.端末ID;
+    }).then(function (結果) {
       if (!結果.届いた) {
         止めるボタンを置く(枠, t);
         知らせる('止められたか分かりませんでした。もう一度ためしてください。');
@@ -152,9 +165,9 @@
     箱.hidden = false;
     要素('番号').textContent = '······';
     要素('番号の説明').textContent = '番号を出しています…';
-    // 送り直しで番号が出し直されても、画面に出るのは最後の（使える）番号
-    送り直しつきで送る({ 操作: '番号を出す', トークン: 鍵, 職員ID: 職員ID }, function (r) {
-      return /^\d{6}$/.test(r.番号) && typeof r.期限 === 'string';
+    // 押すたびに操作IDを1つ付ける。送り直しも、遅れて届いた元の依頼も、裏は同じ番号を返す
+    送り直しつきで送る({ 操作: '番号を出す', トークン: 鍵, 職員ID: 職員ID, 操作ID: 新しい操作ID() }, function (r) {
+      return /^\d{6}$/.test(r.番号) && typeof r.期限 === 'string' && typeof r.名前 === 'string' && r.職員ID === 職員ID;
     }).then(function (結果) {
       ボタン.disabled = false;
       if (!結果.届いた) {
@@ -163,6 +176,8 @@
         return;
       }
       if (!結果.応答.ok) { 箱.hidden = true; 断られた(結果.応答); return; }
+      // 待っている間に別の人を選び直していたら、取り違えないよう番号は出さない（もう一度押してもらう）
+      if (要素('職員を選ぶ').value !== 職員ID) { 箱.hidden = true; return; }
       要素('番号').textContent = 結果.応答.番号.slice(0, 3) + ' ' + 結果.応答.番号.slice(3);
       要素('番号の説明').textContent = 結果.応答.名前 + ' さんの番号です。' + 時分(結果.応答.期限) +
           ' まで、1回だけ使えます。新しく出すと、この番号は使えなくなります。';

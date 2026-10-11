@@ -20,6 +20,8 @@ var 送り直しの間 = [0, 1000, 3000];   // 送り直しつきで送る() の
  * 形が正しいか は ok:true の応答の形を確かめる関数。
  */
 function 送る(依頼, 形が正しいか) {
+  // どの依頼への返事かを照合するための印。送り直す時は同じ依頼を渡すので、同じ印のまま
+  if (!依頼.依頼ID) 依頼.依頼ID = 新しい操作ID();
   var 止め = typeof AbortController === 'function' ? new AbortController() : null;
   var 時間切れ;
   var 待つ = new Promise(function (済む) {
@@ -40,6 +42,8 @@ function 送る(依頼, 形が正しいか) {
   return Promise.race([通信, 待つ]).then(function (応答) {
     clearTimeout(時間切れ);
     if (!応答 || typeof 応答 !== 'object' || typeof 応答.ok !== 'boolean') return { 届いた: false };
+    // この依頼への返事か（「開く」の返事や、別の依頼の返事ではないか）を、断りの返事も含めて照合する
+    if (応答.操作 !== 依頼.操作 || 応答.依頼ID !== 依頼.依頼ID) return { 届いた: false };
     if (応答.ok && 形が正しいか && !形が正しいか(応答)) return { 届いた: false };
     if (!応答.ok && (typeof 応答.コード !== 'string' || typeof 応答.理由 !== 'string')) return { 届いた: false };
     return { 届いた: true, 応答: 応答 };
@@ -100,6 +104,19 @@ function 新しい操作ID() {
 }
 
 // ── 画面の部品 ─────────────────────────────────────────
+
+/**
+ * ほかのページの中に埋め込まれていたら、何もしない（埋め込んだ画面の上から「止める」などを押させる手口を防ぐ）。
+ * GitHub Pages ではヘッダーで埋め込みを禁止できず、meta の CSP では frame-ancestors が効かないため。止めたら true
+ */
+function 埋め込まれていたら止める() {
+  var 埋め込み;
+  try { 埋め込み = window.top !== window.self; } catch (e) { 埋め込み = true; }
+  if (!埋め込み) return false;
+  document.body.textContent = '';
+  document.body.appendChild(作る('p', { class: 'loading', text: 'この画面は、ほかのページの中では使えません。' }));
+  return true;
+}
 
 function 要素(id) { return document.getElementById(id); }
 
@@ -179,7 +196,8 @@ function 端末名の見当() {
 
 /**
  * 代表からもらった6けたの番号で、この端末を登録する。
- * トークンはこの端末で作って送る。返事が届かず押し直しても、同じトークンなので裏は「登録済み」と返す。
+ * トークンはこの端末で作り、送る前に「登録中のトークン」としてしまう。返事が届かないまま押し直しても、
+ * 開き直しても、同じトークンで送るので、裏は「登録済み」か「続きから登録」で応じる（番号だけ使い切らない）。
  * 済んだら({ トークン, 名前, 役割 }) は、トークンをしまってから呼ぶ。前置き は断られて戻ってきた時の一言。
  */
 function 登録の画面を出す(前置き, 済んだら) {
@@ -187,7 +205,8 @@ function 登録の画面を出す(前置き, 済んだら) {
   入れ物.textContent = '';
   画面を切り替える('登録');
   知らせる(null);
-  var トークン = 新しいトークン();
+  var トークン = 取り出す('登録中のトークン');
+  if (typeof トークン !== 'string' || !/^[0-9a-f]{64}$/.test(トークン)) トークン = 新しいトークン();
 
   var 番号 = 作る('input', {
     id: '番号の欄', type: 'text', inputmode: 'numeric', autocomplete: 'one-time-code',
@@ -213,12 +232,11 @@ function 登録の画面を出す(前置き, 済んだら) {
 
   用紙.addEventListener('submit', function (e) {
     e.preventDefault();
-    // しまえない画面（プライベートブラウズなど）では、番号を使う前に止める
-    if (!しまう('登録の試し', 1)) {
+    // 送る前にしまう。しまえない画面（プライベートブラウズなど）では、番号を使う前に止める
+    if (!しまう('登録中のトークン', トークン)) {
       返事.textContent = 'この画面では登録を残せません（プライベートブラウズなど）。ふつうの画面で開き直してください。';
       return;
     }
-    しまう('登録の試し', null);
     ボタン.disabled = true;
     返事.textContent = '登録しています…';
     送り直しつきで送る({ 操作: '登録', 番号: 番号.value, 端末名: 名前.value, トークン: トークン }, function (r) {
@@ -229,11 +247,22 @@ function 登録の画面を出す(前置き, 済んだら) {
         返事.textContent = '送れませんでした。電波のよい所で、もう一度押してください。';
         return;
       }
-      if (!結果.応答.ok) { 返事.textContent = 結果.応答.理由; return; }
+      if (!結果.応答.ok) {
+        // 登録中のトークンが、前に登録されて止められたものだった時。新しいトークンに替えて押し直してもらう
+        if (結果.応答.コード === '未登録') {
+          トークン = 新しいトークン();
+          しまう('登録中のトークン', null);
+          返事.textContent = 'もう一度「登録する」を押してください。';
+          return;
+        }
+        返事.textContent = 結果.応答.理由;
+        return;
+      }
       if (!しまう('トークン', トークン)) {
         返事.textContent = 'この画面では登録を残せません。ふつうの画面で開き直して、代表に新しい番号をもらってください。';
         return;
       }
+      しまう('登録中のトークン', null);
       済んだら({ トークン: トークン, 名前: 結果.応答.名前, 役割: 結果.応答.役割 });
     });
   });
