@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src https://script.google.com https://script.googleusercontent.com; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#2e6a4c">
+<title>代表の画面（試作）</title>
+<link rel="stylesheet" href="style.css">
+<script src="common.js" defer></script>
+<script src="admin.js" defer></script>
+</head>
+<body>
+<header class="top">
+  <span class="date">代表の画面</span>
+  <span id="名前"></span>
+</header>
+
+<main class="page wide">
+  <div class="banner" id="知らせ" role="alert" hidden></div>
+
+  <p class="loading" id="読み込み中">読み込んでいます…</p>
+
+  <section id="登録" hidden></section>
+
+  <section id="本体" hidden>
+    <p class="muted small right" id="読んだ時刻"></p>
+
+    <div class="card">
+      <h2>登録番号を出す</h2>
+      <p class="muted small">職員のスマホを登録する時に使います。番号は10分だけ、1回だけ使えます。</p>
+      <div class="row">
+        <label for="職員を選ぶ" class="sr">登録する人</label>
+        <select id="職員を選ぶ" class="input"></select>
+        <button type="button" class="btn" id="番号を出す">番号を出す</button>
+      </div>
+      <div class="codebox" id="番号の箱" hidden>
+        <span class="code" id="番号"></span>
+        <span id="番号の説明"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>記録の一覧 <span class="muted small">新しい順・100件まで</span></h2>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>日時</th><th>名前</th><th>種類</th></tr></thead>
+          <tbody id="記録"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>使える端末</h2>
+      <p class="muted small">機種を変えた時・なくした時は、古い端末を止めます。止めた端末は、もう押せなくなります。</p>
+      <div class="devices" id="端末"></div>
+    </div>
+  </section>
+
+  <p class="link" id="職員の画面へ"><a href="index.html">出勤・退勤の画面へ</a></p>
+</main>
+</body>
+</html>

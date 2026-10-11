@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src https://script.google.com https://script.googleusercontent.com; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#2e6a4c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="出勤・退勤">
+<title>出勤・退勤（試作）</title>
+<link rel="stylesheet" href="style.css">
+<script src="common.js" defer></script>
+<script src="staff.js" defer></script>
+</head>
+<body>
+<header class="top">
+  <span class="date" id="今日"></span>
+  <span id="名前"></span>
+</header>
+
+<main class="page">
+  <div class="banner" id="知らせ" role="alert" hidden></div>
+
+  <p class="loading" id="読み込み中">読み込んでいます…</p>
+
+  <section id="登録" hidden></section>
+
+  <section id="本体" hidden>
+    <div class="banner warn" id="待ちの知らせ" hidden>
+      <span id="待ちの文"></span>
+      <div class="acts">
+        <button type="button" class="btn" id="送り直す">もう一度送る</button>
+        <button type="button" class="btn ghost" id="やめる">やめる</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>出勤・退勤</h2>
+      <div class="punch">
+        <button type="button" id="出勤">出勤<small id="出勤の時刻">押すと時刻が残る</small></button>
+        <button type="button" class="out" id="退勤">退勤<small id="退勤の時刻">—</small></button>
+      </div>
+      <p class="done" id="状態" role="status"></p>
+    </div>
+
+    <div class="card">
+      <h2>最近の記録</h2>
+      <ul class="list" id="記録"></ul>
+    </div>
+
+    <p class="link" id="代表へ" hidden><a href="admin.html">代表の画面へ</a></p>
+  </section>
+</main>
+</body>
+</html>
